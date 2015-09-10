@@ -13,18 +13,23 @@
   xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
   xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0"
   xmlns:xlink="http://www.w3.org/1999/xlink"
+  xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0" 
   xmlns:number="urn:oasis:names:tc:opendocument:xmlns:datastyle:1.0"
   xmlns:form="urn:oasis:names:tc:opendocument:xmlns:form:1.0"
   xmlns:script="urn:oasis:names:tc:opendocument:xmlns:script:1.0"
   xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0"
-  exclude-result-prefixes="text dc xsl fo office style table draw xlink form script config number svg">
+  exclude-result-prefixes="text dc xsl fo meta office style table draw xlink form script config number svg">
 
 <xsl:output method="xml" omit-xml-declaration="no" version="1.0" encoding="utf-8" indent="yes"/>
-<!-- groups of &heading2; have the same id -->
+
+<xsl:decimal-format
+name="i18n"
+decimal-separator="." /> 
+
 <xsl:key name="h2" match="&heading2;" use="generate-id(preceding-sibling::&heading1;[1])" />
 <xsl:key name="h3" match="&heading3;" use="generate-id(preceding-sibling::&heading2;[1])" />
 
-<xsl:key name="styles" match="/office:document/office:automatic-styles/style:style/attribute::style:parent-style-name" use="attribute::style:name" />
+<xsl:key name="parent-style" match="/office:document/office:automatic-styles/style:style/attribute::style:parent-style-name" use="parent::style:style[1]/attribute::style:name" />
 
 <xsl:strip-space elements="*"/>
 
@@ -33,9 +38,7 @@
   </xsl:template>
 
 <!--
-
   <xsl:template match="font" />
-
   <xsl:template match="div">
     <xsl:apply-templates select="*"/>
   </xsl:template>
@@ -43,6 +46,17 @@
 
 <xsl:template match="/office:document/office:body/office:text">
     <temas>
+        <meta>
+            <course>
+                <xsl:value-of select="/office:document/office:meta/dc:subject" />
+            </course>
+            <courseurl>
+                <xsl:value-of select="/office:document/office:meta/meta:user-defined[@meta:name='URL']" />
+            </courseurl>
+            <bibliotecaurl>
+                <xsl:value-of select="/office:document/office:meta/meta:user-defined[@meta:name='biblioteca']" />
+            </bibliotecaurl>
+        </meta>
         <xsl:for-each select="&heading1; | &heading2; | &heading3;" >
             <xsl:variable name="h" select="."/>
             <tema>
@@ -111,8 +125,8 @@
        - another h{1,2,3}
        - anything preceded by an &heading1; AND that is after the current &heading2; (i.e., it is preceded by more &heading2;s [one more exactly] than current &heading2; ) 
        - anything preceded by an &heading3; AND that is after the current &heading2; (i.e., whose NodeList of preceding &heading2;s contains current &heading2;)// doesn't work if two &heading2; have the same name
-
   -->
+
   <xsl:template match="&heading2;" mode="body">
       <xsl:apply-templates select="following-sibling::*[generate-id(preceding-sibling::&heading2;[1]) = generate-id(current())]
           [not(self::&heading1;)][not(self::&heading2;)][not(self::&heading3;)]
@@ -255,7 +269,29 @@
 </xsl:template>
 
 <xsl:template match="text:p[draw:frame]" mode="paragraph" priority="2">
-    <xsl:apply-templates select="draw:frame" mode="image" />
+    <xsl:variable name="pstyle" select="key('parent-style', draw:frame/attribute::draw:style-name)" />
+    <xsl:message>
+        $pstyle is <xsl:value-of select="$pstyle"/> or 
+        <xsl:value-of select="key('parent-style', 'fr2')"/>
+        draw:style-name IS <xsl:value-of select="draw:frame/attribute::draw:style-name"/>
+    </xsl:message>
+    <xsl:choose>
+        <xsl:when test="$pstyle='imagenchica' or attribute::draw:style-name='imagenchica'">
+            <xsl:apply-templates select="draw:frame" mode="image-sm" />
+        </xsl:when>
+        <xsl:otherwise>
+            <xsl:apply-templates select="draw:frame" mode="image" />
+        </xsl:otherwise>
+    </xsl:choose>
+</xsl:template>
+
+<xsl:template match="draw:frame[not(draw:text-box)]" mode="image-sm">
+    <xsl:variable name="base64" select="draw:image/office:binary-data"/>
+        <img class="img-small">
+            <xsl:attribute name="src">
+                <xsl:value-of select="concat('data:;base64,', $base64)"/>
+            </xsl:attribute>
+        </img>
 </xsl:template>
 
 <xsl:template match="draw:frame[not(draw:text-box)]" mode="image">
@@ -268,6 +304,24 @@
 </xsl:template>
 
 <xsl:template match="draw:frame[draw:text-box]" mode="image">
+    <xsl:variable name="base64" select="draw:text-box/text:p/draw:frame/draw:image/office:binary-data"/>
+    <div class="figure">
+        <p>
+            <img class="fg-scaled">
+                <xsl:attribute name="src">
+                    <xsl:value-of select="concat('data:;base64,', $base64)"/>
+                </xsl:attribute>
+            </img>
+        </p>
+        <p>
+            <xsl:value-of select="draw:text-box/text:p/text()[1]"/>
+            <xsl:value-of select="draw:text-box/text:p/text:sequence" />
+            <xsl:value-of select="draw:text-box/text:p/text()[2]"/>
+        </p>
+    </div>
+</xsl:template>
+
+<xsl:template match="draw:frame[draw:text-box]" mode="image-sm">
     <xsl:variable name="base64" select="draw:text-box/text:p/draw:frame/draw:image/office:binary-data"/>
     <div class="figure">
         <p>
@@ -302,6 +356,7 @@
     </iframe>
 </xsl:template>
 
+
 <xsl:template match="text:p[@text:style-name='pullquote']" mode="paragraph" priority="2">
     <div class='alert'>
         <img src="img/png/warning.png" />
@@ -334,7 +389,7 @@
         <xsl:attribute name="src">
             <xsl:value-of select="concat('articulates/', string(.), '/interaction.html')" />
         </xsl:attribute>
-        Su navegador no es compatible. Por favor, descargue un navegador más reciente. 
+        Su navegador no es compatible con este componente. Por favor, descargue un navegador más reciente. 
     </iframe>
 </xsl:template>
 
@@ -365,7 +420,12 @@
     <xsl:variable name="H">400</xsl:variable>
     <xsl:variable name="w" select="($W div $n) * (3 div 4)"/>
     <xsl:variable name="m" select="($W - $n * $w) div ($n + 1)" />
-    <svg width="{concat($W, 'px')}" height="{concat($H, 'px')}">
+    <svg width="{concat(format-number($W, i18n), 'px')}" height="{concat($H, 'px')}" id="percent">
+        <g>
+            <text x="{format-number($W div 2, i18n)}" y="22" style="text-anchor:middle;font-size:14px;font-weight:bold;">
+                <xsl:value-of select="table:table-header-rows/table:table-row/table:table-cell[1]" />
+            </text>
+        </g>
         <g>
             <!--<xsl:apply-templates select="table:table-row[not(generate-id(current()) = generate-id(parent::table:table/table:table-row[1]))]" mode="percentage">-->
             <xsl:apply-templates select="table:table-row" mode="percentage">
@@ -373,8 +433,8 @@
                 <xsl:with-param name="w" select="$w" />
                 <xsl:with-param name="m" select="$m" />
             </xsl:apply-templates>
-        <line x1="{$m div 2}" y1="{$H - 15}" x2="{$W - $m div 2}" y2="{$H - 15}" stroke="silver" stroke-width="1"/>
-        <line x1="{$m div 2}" y1="{$H - 15}" x2="{$m div 2}" y2="15" stroke="silver" stroke-width="1"/>
+            <line x1="{format-number($m div 2, i18n)}" y1="{$H - 15}" x2="{format-number($W - $m div 2, i18n)}" y2="{$H - 15}" stroke="silver" stroke-width="1"/>
+            <line x1="{format-number($m div 2, i18n)}" y1="{format-number($H - 15, i18n)}" x2="{format-number($m div 2, i18n)}" y2="15" stroke="silver" stroke-width="1"/>
         </g>
     </svg>
 </xsl:template>
@@ -390,14 +450,13 @@
     <!--margin-y is hardcoded -->
     <xsl:variable name="my" select="15"/>
     <xsl:variable name="y" select="$H - $my - $h"/>
-    <xsl:message><xsl:value-of select="$x" /></xsl:message>
     <xsl:variable name="text" select="table:table-cell[1]" />
 
-    <text x="{$x + floor($w div 2)}" y="{$H - $h - $my - 15}" style="text-anchor:middle;font-size:10px;"><xsl:value-of select="concat($dividend, '%')" /></text>
+    <text x="{format-number($x + $w div 2, i18n)}" y="{format-number($H - $h - $my - 15, i18n)}" style="text-anchor:middle;font-size:10px;"><xsl:value-of select="concat($dividend, '%')" /></text>
 
-    <rect x="{$x}" y="{$y}" style="fill:steelblue" width="{$w}" height="{$h}">
+    <rect x="{format-number($x, i18n)}" y="{format-number($y, i18n)}" style="fill:steelblue" width="{format-number($w, i18n)}" height="{format-number($h, i18n)}">
     </rect> 
-    <text x="{$x + floor($w div 2)}" y="{$H - floor($my div 3)}" style="text-anchor:middle;font-size:10px;">
+    <text x="{format-number($x + floor($w div 2), i18n)}" y="{format-number($H - floor($my div 3), i18n)}" style="text-anchor:middle;font-size:10px;">
         <xsl:value-of select="$text" />
     </text>
 </xsl:template>
@@ -415,19 +474,47 @@
                 <xsl:value-of select="./attribute::table:number-columns-spanned" />
             </xsl:attribute>
         </xsl:if>
-
         <!-- <xsl:apply-templates select="*" mode="character" /> -->
         <xsl:value-of select="." />
     </td> 
 </xsl:template>
 
+<xsl:template match="text:list[@text:style-name='truefalse']" mode="paragraph" priority="2">
+    <h4>Ejercicio</h4>
+    <p>Marque todas las opciones que considere correctas.</p>
+    <form>
+        <ul class="tf-checklist">
+            <xsl:apply-templates select="text:list-item" mode="truefalse" />
+        </ul>
+    </form>
+</xsl:template>
+
+<xsl:template match="text:list-item" mode="truefalse">
+    <xsl:variable name="id" selec="concat('cb', string(count(preceding-sibling::text:list-item) + 1))"/>
+    <li>
+        <input type="checkbox" id="{$id}" class="checkbox"></input>
+        <label for="{$id}">
+            <xsl:value-of select="text:p/text()" />
+        </label>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"></svg>
+        <div class="modal">
+            <p>
+                <xsl:attribute name="class">
+                    <xsl:value-of select="text:list/text:list-item/text:p/text:span/attribute::text:style-name" />
+                </xsl:attribute>
+            <xsl:apply-templates select="text:list" mode="tf-modal" />
+            </p>
+        </div>
+    </li>
+</xsl:template>
+
 <xsl:template match="text:list" mode="paragraph">
     <ul>
-        <xsl:apply-templates select="text:list-item" />
+        <xsl:apply-templates select="text:list-item" mode="list" />
     </ul>
 </xsl:template>
 
-<xsl:template match="text:list-item">
+<xsl:template match="text:list-item" mode="list">
     <li>
         <xsl:apply-templates select="text:p" mode="paragraph" />
     </li>
@@ -435,12 +522,18 @@
 
 <xsl:template match="text:note" mode="character">
     <cite class="tooltip">
-        <xsl:value-of select="text:note-body" />
+        <xsl:apply-templates select="text:note-body/text:p" mode="cite"/>
     </cite>
 </xsl:template>
 
+<xsl:template match="text:p" mode="cite">
+    <span>
+        <xsl:apply-templates mode="character" />
+    </span>
+</xsl:template>
+
 <xsl:template match="text:a" mode="character">
-    <a>
+    <a target="_blank">
         <xsl:attribute name="href">
             <xsl:value-of select="attribute::xlink:href" />
         </xsl:attribute>
