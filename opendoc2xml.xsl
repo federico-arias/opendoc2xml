@@ -22,14 +22,14 @@
 
 <xsl:output method="xml" omit-xml-declaration="no" version="1.0" encoding="utf-8" indent="yes"/>
 
-<xsl:decimal-format
-name="i18n"
-decimal-separator="." /> 
+<xsl:decimal-format name="i18n" decimal-separator="." /> 
 
 <xsl:key name="h2" match="&heading2;" use="generate-id(preceding-sibling::&heading1;[1])" />
 <xsl:key name="h3" match="&heading3;" use="generate-id(preceding-sibling::&heading2;[1])" />
 
 <xsl:key name="parent-style" match="/office:document/office:automatic-styles/style:style/attribute::style:parent-style-name" use="parent::style:style[1]/attribute::style:name" />
+
+<xsl:key name="list-style-name" match="/office:document/office:automatic-styles/text:list-style/text:list-level-style-number" use="parent::text:list-style[1]/attribute::style:name" />
 
 <xsl:strip-space elements="*"/>
 
@@ -323,9 +323,9 @@ decimal-separator="." />
 
 <xsl:template match="draw:frame[draw:text-box]" mode="image-sm">
     <xsl:variable name="base64" select="draw:text-box/text:p/draw:frame/draw:image/office:binary-data"/>
-    <div class="figure">
+    <div class="fg-small">
         <p>
-            <img class="fg-scaled">
+            <img class="fg-img-small">
                 <xsl:attribute name="src">
                     <xsl:value-of select="concat('data:;base64,', $base64)"/>
                 </xsl:attribute>
@@ -355,7 +355,6 @@ decimal-separator="." />
         Su navegador no es compatible. Por favor, descargue un navegador más reciente. 
     </iframe>
 </xsl:template>
-
 
 <xsl:template match="text:p[@text:style-name='pullquote']" mode="paragraph" priority="2">
     <div class='alert'>
@@ -509,9 +508,19 @@ decimal-separator="." />
 </xsl:template>
 
 <xsl:template match="text:list" mode="paragraph">
-    <ul>
-        <xsl:apply-templates select="text:list-item" mode="list" />
-    </ul>
+    <xsl:variable name="is-ordered" select="boolean(count(key('list-style-name', attribute::text:style-name)))" />
+    <xsl:choose>
+        <xsl:when test="$is-ordered">
+            <ol>
+                <xsl:apply-templates select="text:list-item" mode="list"/>
+            </ol>
+        </xsl:when>
+        <xsl:otherwise>
+            <ul>
+                <xsl:apply-templates select="text:list-item" mode="list"/>
+            </ul>
+        </xsl:otherwise>
+    </xsl:choose>
 </xsl:template>
 
 <xsl:template match="text:list-item" mode="list">
@@ -539,6 +548,15 @@ decimal-separator="." />
         </xsl:attribute>
         <xsl:value-of select="." />
     </a>
+</xsl:template>
+
+<xsl:template match="text:p[@text:style-name='youtube']" mode="paragraph" priority="3">
+    <iframe width="100%" height="360" frameBorder="0">
+        <xsl:attribute name="src">
+            <xsl:value-of select="concat('http://www.youtube.com/embed/', string(.))" />
+        </xsl:attribute>
+        Su navegador no es compatible. Por favor, descargue un navegador más reciente. 
+    </iframe>
 </xsl:template>
 
 </xsl:stylesheet>
